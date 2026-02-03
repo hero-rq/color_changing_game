@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Cup Order Guessing Game</title>
+  <style>
+    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    body { margin: 0; background: #0b0f19; color: #e8eefc; }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 22px; }
+    h1 { margin: 0 0 10px; font-size: 22px; }
+    p { margin: 8px 0; color: #b9c6e6; line-height: 1.35; }
+    .card {
+      background: #121a2d; border: 1px solid rgba(255,255,255,.08);
+      border-radius: 14px; padding: 14px; margin: 12px 0;
+      box-shadow: 0 10px 30px rgba(0,0,0,.25);
+    }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+    label { font-size: 13px; color: #b9c6e6; }
+    select, button, input {
+      background: #0c1222; color: #e8eefc;
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 10px; padding: 10px 12px; font-size: 14px;
+      outline: none;
+    }
+    button { cursor: pointer; }
+    button:hover { border-color: rgba(255,255,255,.22); }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
+    .pill {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 8px 10px; border-radius: 999px;
+      background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08);
+      font-size: 13px; color: #cfe0ff;
+    }
+    .colors { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .color-chip {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 8px 10px; border-radius: 999px; font-weight: 600;
+      border: 1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.04);
+      user-select: none;
+    }
+    .dot { width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 0 2px rgba(255,255,255,.12) inset; }
+    .guess-grid {
+      display: grid; grid-template-columns: repeat(7, minmax(120px, 1fr));
+      gap: 10px;
+    }
+    @media (max-width: 760px) {
+      .guess-grid { grid-template-columns: repeat(2, minmax(140px, 1fr)); }
+    }
+    .slot { display: flex; flex-direction: column; gap: 6px; }
+    .muted { color: #93a6d6; font-size: 13px; }
+    .log {
+      max-height: 340px; overflow: auto; padding-right: 6px;
+      border-top: 1px dashed rgba(255,255,255,.12); margin-top: 10px; padding-top: 10px;
+    }
+    .log-item {
+      padding: 10px; border-radius: 12px; margin: 8px 0;
+      background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08);
+    }
+    .log-item b { color: #eaf1ff; }
+    .success {
+      border-color: rgba(80, 255, 160, .35);
+      background: rgba(80, 255, 160, .10);
+    }
+    .danger {
+      border-color: rgba(255, 120, 120, .25);
+      background: rgba(255, 120, 120, .08);
+    }
+    .tiny { font-size: 12px; color: #98acd9; }
+    .footer { margin-top: 14px; color: #9ab0e2; font-size: 12px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>🎮 Cup Order Guessing Game (Exact Matches Only)</h1>
+    <p>Pick <span class="mono">N</span> cups (5/6/7). All colors are unique. A hidden random order exists. Each guess returns only how many positions are exactly correct.</p>
+
+    <div class="card">
+      <div class="row">
+        <div class="pill">Mode: <b>Permutation</b> (no duplicates)</div>
+        <div class="pill">Feedback: <b>Exact position matches</b> only</div>
+        <div class="pill">No extra hints 😈</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div>
+          <label for="nSelect">Number of cups (N)</label><br/>
+          <select id="nSelect">
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="7">7</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="seedInput">Optional seed (for repeatable games)</label><br/>
+          <input id="seedInput" placeholder="e.g., 12345 (or leave empty)" />
+        </div>
+
+        <div style="margin-top:18px;">
+          <button id="newGameBtn">New Game</button>
+          <button id="revealBtn" title="Use only if you're stuck 🙂">Reveal Secret</button>
+        </div>
+
+        <div style="margin-left:auto;">
+          <div class="pill">Turn: <b id="turnLabel">0</b></div>
+          <div class="pill">Status: <b id="statusLabel">Not started</b></div>
+        </div>
+      </div>
+
+      <div class="colors" id="colorsBar"></div>
+
+      <p class="muted" id="promptLine">Start a new game to begin.</p>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content: space-between;">
+        <div class="pill">Build your guess (Position 1 → N)</div>
+        <div class="tiny">Tip: no duplicates allowed; the UI will prevent it.</div>
+      </div>
+
+      <div class="guess-grid" id="guessGrid"></div>
+
+      <div class="row" style="margin-top:12px;">
+        <button id="submitBtn" disabled>Submit Guess</button>
+        <button id="shuffleBtn" disabled>Random Guess</button>
+        <button id="clearBtn" disabled>Clear Guess</button>
+      </div>
+
+      <div id="msgBox" class="footer"></div>
+
+      <div class="log" id="log"></div>
+    </div>
+
+    <div class="footer">
+      Built as a single HTML file. Works offline.✨ Enjoy guessing! 🎉
+    </div>
+  </div>
+
+  <script>
+    const DEFAULT_COLORS = [
+      { name: "RED",    hex: "#ff4d4d" },
+      { name: "BLUE",   hex: "#4da3ff" },
+      { name: "GREEN",  hex: "#43e07a" },
+      { name: "YELLOW", hex: "#ffd24d" },
+      { name: "PURPLE", hex: "#b64dff" },
+      { name: "ORANGE", hex: "#ff8c4d" },
+      { name: "CYAN",   hex: "#45e6ff" },
+    ];
+
+    function hashStringToSeed(str) {
+      // Deterministic seed from string (simple hash)
+      let h = 2166136261;
+      for (let i = 0; i < str.length; i++) {
+        h ^= str.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+      }
+      return (h >>> 0);
+    }
+
+    function mulberry32(seed) {
+      // Tiny PRNG: deterministic, good enough for games
+      let a = seed >>> 0;
+      return function() {
+        a |= 0; a = a + 0x6D2B79F5 | 0;
+        let t = Math.imul(a ^ a >>> 15, 1 | a);
+        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      };
+    }
+
+    function shuffle(arr, rand) {
+      const a = arr.slice();
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(rand() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
+    function scoreGuess(secret, guess) {
+      let s = 0;
+      for (let i = 0; i < secret.length; i++) {
+        if (secret[i] === guess[i]) s++;
+      }
+      return s;
+    }
+
+    // ======== State ========
+    let N = 5;
+    let colors = [];      // array of color objects
+    let secret = [];      // array of color names in order
+    let guess = [];       // array of selected color names length N (may contain "")
+    let turn = 0;
+    let started = false;
+    let finished = false;
+    let rand = Math.random;
+
+    // ======== DOM ========
+    const nSelect    = document.getElementById("nSelect");
+    const seedInput  = document.getElementById("seedInput");
+    const newGameBtn = document.getElementById("newGameBtn");
+    const revealBtn  = document.getElementById("revealBtn");
+
+    const turnLabel  = document.getElementById("turnLabel");
+    const statusLabel= document.getElementById("statusLabel");
+    const colorsBar  = document.getElementById("colorsBar");
+    const promptLine = document.getElementById("promptLine");
+
+    const guessGrid  = document.getElementById("guessGrid");
+    const submitBtn  = document.getElementById("submitBtn");
+    const shuffleBtn = document.getElementById("shuffleBtn");
+    const clearBtn   = document.getElementById("clearBtn");
+    const msgBox     = document.getElementById("msgBox");
+    const log        = document.getElementById("log");
+
+    function setStatus(text) {
+      statusLabel.textContent = text;
+    }
+
+    function setMessage(text, kind="") {
+      msgBox.textContent = text;
+      msgBox.className = "footer " + (kind ? kind : "");
+    }
+
+    function renderColorsBar() {
+      colorsBar.innerHTML = "";
+      colors.forEach(c => {
+        const el = document.createElement("div");
+        el.className = "color-chip";
+        el.innerHTML = `<span class="dot" style="background:${c.hex}"></span>${c.name}`;
+        colorsBar.appendChild(el);
+      });
+    }
+
+    function buildGuessGrid() {
+      guessGrid.innerHTML = "";
+      for (let i = 0; i < N; i++) {
+        const slot = document.createElement("div");
+        slot.className = "slot";
+
+        const lab = document.createElement("label");
+        lab.textContent = `Position ${i+1}`;
+        lab.htmlFor = `pos_${i}`;
+
+        const sel = document.createElement("select");
+        sel.id = `pos_${i}`;
+        sel.disabled = !started || finished;
+
+        // placeholder
+        const ph = document.createElement("option");
+        ph.value = "";
+        ph.textContent = "— choose —";
+        sel.appendChild(ph);
+
+        colors.forEach(c => {
+          const opt = document.createElement("option");
+          opt.value = c.name;
+          opt.textContent = c.name;
+          sel.appendChild(opt);
+        });
+
+        sel.value = guess[i] || "";
+
+        sel.addEventListener("change", () => {
+          // Enforce no duplicates:
+          const chosen = sel.value;
+          guess[i] = chosen;
+
+          // If duplicate exists elsewhere, revert this selection
+          if (chosen) {
+            for (let k = 0; k < N; k++) {
+              if (k !== i && guess[k] === chosen) {
+                // duplicate found -> undo
+                guess[i] = "";
+                sel.value = "";
+                setMessage(`No duplicates allowed. ${chosen} is already used.`, "danger");
+                return;
+              }
+            }
+          }
+          setMessage("");
+        });
+
+        slot.appendChild(lab);
+        slot.appendChild(sel);
+        guessGrid.appendChild(slot);
+      }
+    }
+
+    function updateControls() {
+      submitBtn.disabled  = !started || finished;
+      shuffleBtn.disabled = !started || finished;
+      clearBtn.disabled   = !started || finished;
+      revealBtn.disabled  = !started;
+
+      turnLabel.textContent = String(turn);
+      if (!started) setStatus("Not started");
+      else if (finished) setStatus("Finished");
+      else setStatus("Playing");
+    }
+
+    function resetLog() {
+      log.innerHTML = "";
+    }
+
+    function logTurn(guessArr, score, won=false) {
+      const div = document.createElement("div");
+      div.className = "log-item" + (won ? " success" : "");
+      div.innerHTML = `
+        <div><b>Turn ${turn}</b> — Score: <b>${score}/${N}</b></div>
+        <div class="mono tiny">${guessArr.join(" ")}</div>
+      `;
+      log.prepend(div);
+    }
+
+    function startNewGame() {
+      N = parseInt(nSelect.value, 10);
+      colors = DEFAULT_COLORS.slice(0, N);
+
+      const seedText = seedInput.value.trim();
+      if (seedText.length > 0) {
+        const seed = hashStringToSeed(seedText);
+        rand = mulberry32(seed);
+      } else {
+        // nondeterministic-ish seed from crypto if available, else Math.random
+        try {
+          const buf = new Uint32Array(1);
+          crypto.getRandomValues(buf);
+          rand = mulberry32(buf[0]);
+        } catch {
+          rand = Math.random;
+        }
+      }
+
+      const colorNames = colors.map(c => c.name);
+      secret = shuffle(colorNames, rand);
+      guess = Array(N).fill("");
+
+      turn = 0;
+      started = true;
+      finished = false;
+
+      renderColorsBar();
+      buildGuessGrid();
+      resetLog();
+      setMessage("");
+      promptLine.textContent = "Make a guess (choose one color per position) then Submit.";
+      updateControls();
+    }
+
+    function currentGuessValid() {
+      if (guess.length !== N) return false;
+      if (guess.some(x => !x)) return false;
+      const set = new Set(guess);
+      return set.size === N;
+    }
+
+    function submitGuess() {
+      if (!currentGuessValid()) {
+        setMessage("Complete your guess: pick a unique color for every position.", "danger");
+        return;
+      }
+
+      turn++;
+      const sc = scoreGuess(secret, guess);
+      const won = (sc === N);
+
+      logTurn(guess.slice(), sc, won);
+
+      if (won) {
+        finished = true;
+        promptLine.textContent = "🏆 You cracked it!";
+        setMessage(`WIN! Secret was: ${secret.join(" ")}`, "");
+      } else {
+        setMessage(`Score returned: ${sc}/${N}. Keep going 😈`);
+      }
+
+      updateControls();
+      buildGuessGrid(); // to disable selects if finished
+    }
+
+    function randomGuess() {
+      const colorNames = colors.map(c => c.name);
+      const rnd = shuffle(colorNames, rand);
+      guess = rnd.slice(0, N);
+      setMessage("Random guess filled.");
+      buildGuessGrid();
+    }
+
+    function clearGuess() {
+      guess = Array(N).fill("");
+      setMessage("Cleared.");
+      buildGuessGrid();
+    }
+
+    function revealSecret() {
+      if (!started) return;
+      setMessage(`(Reveal) Secret: ${secret.join(" ")}`, "");
+    }
+
+    // Wire up
+    newGameBtn.addEventListener("click", startNewGame);
+    submitBtn.addEventListener("click", submitGuess);
+    shuffleBtn.addEventListener("click", randomGuess);
+    clearBtn.addEventListener("click", clearGuess);
+    revealBtn.addEventListener("click", revealSecret);
+
+    // Initial UI
+    renderColorsBar();
+    buildGuessGrid();
+    updateControls();
+    setMessage("Press New Game to begin 🙂");
+  </script>
+</body>
+</html>
